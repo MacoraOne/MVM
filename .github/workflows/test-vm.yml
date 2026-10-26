@@ -1,0 +1,38 @@
+name: MacoraOne VM bytecode tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vm-tests:
+    name: Build and exercise bytecode VM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install C toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Compile with strict diagnostics
+        run: make clean all
+
+      - name: Run VM API and bytecode tests
+        run: |
+          set -euo pipefail
+          ./vm-test | tee vm-test.log
+          grep -F "MACORAONE_VM_ALL_TESTS_PASS" vm-test.log
+
+      - name: Run AddressSanitizer and UndefinedBehaviorSanitizer
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -Wno-misleading-indentation \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            vm.c test_vm.c -o vm-test-sanitized -lm
+          ASAN_OPTIONS=detect_leaks=1 ./vm-test-sanitized
